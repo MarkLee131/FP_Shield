@@ -1,0 +1,8 @@
+venv/
+slither/ # git clone 
+
+smartbugs-curated/
+smartbugs.wiki/
+
+response/
+result/
