@@ -1,0 +1,340 @@
+﻿rule,desc,imple_path
+arbitrary_send_eth,"Functions that send Ether to arbitrary destinations
+Configuration
+Check: arbitrary-send-eth
+Severity: High
+Confidence: Medium
+Description
+Unprotected call to a function sending Ether to an arbitrary address.
+
+Exploit Scenario:
+contract ArbitrarySendEth{
+    address destination;
+    function setDestination(){
+        destination = msg.sender;
+    }
+
+    function withdraw() public{
+        destination.transfer(this.balance);
+    }
+}
+Bob calls setDestination and withdraw. As a result he withdraws the contract's balance.
+
+Recommendation
+Ensure that an arbitrary user cannot withdraw unauthorized funds.",/home/kaixuan/aila2024/slither/slither/detectors/functions/arbitrary_send_eth.py
+assembly,x,x
+bad_prng,"Weak PRNG
+Configuration
+Check: weak-prng
+Severity: High
+Confidence: Medium
+Description
+Weak PRNG due to a modulo on block.timestamp, now or blockhash. These can be influenced by miners to some extent so they should be avoided.
+
+Exploit Scenario:
+contract Game {
+
+    uint reward_determining_number;
+
+    function guessing() external{
+      reward_determining_number = uint256(block.blockhash(10000)) % 10;
+    }
+}
+Eve is a miner. Eve calls guessing and re-orders the block containing the transaction. As a result, Eve wins the game.
+
+Recommendation
+Do not use block.timestamp, now or blockhash as a source of randomness",/home/kaixuan/aila2024/slither/slither/detectors/operations/bad_prng.py
+boolean_equal,x,x
+constable_states,x,x
+constant_function_asm,x,x
+controlled_array_length,"Array Length Assignment
+Configuration
+Check: controlled-array-length
+Severity: High
+Confidence: Medium
+Description
+Detects the direct assignment of an array's length.
+
+Exploit Scenario:
+contract A {
+	uint[] testArray; // dynamic size array
+
+	function f(uint usersCount) public {
+		// ...
+		testArray.length = usersCount;
+		// ...
+	}
+
+	function g(uint userIndex, uint val) public {
+		// ...
+		testArray[userIndex] = val;
+		// ...
+	}
+}
+Contract storage/state-variables are indexed by a 256-bit integer. The user can set the array length to 2**256-1 in order to index all storage slots. In the example above, one could call the function f to set the array length, then call the function g to control any storage slot desired. Note that storage slots here are indexed via a hash of the indexers; nonetheless, all storage will still be accessible and could be controlled by the attacker.
+
+Recommendation
+Do not allow array lengths to be set directly set; instead, opt to add values as needed. Otherwise, thoroughly review the contract to ensure a user-controlled variable cannot reach an array length assignment.",/home/kaixuan/aila2024/slither/slither/detectors/statements/array_length_assignment.py
+deprecated_standards,x,x
+erc20_interface,x,x
+external_function,x,x
+incorrect_equality,x,x
+incorrect_modifier,"Incorrect modifier
+Configuration
+Check: incorrect-modifier
+Severity: Low
+Confidence: High
+Description
+If a modifier does not execute _ or revert, the execution of the function will return the default value, which can be misleading for the caller.
+
+Exploit Scenario:
+    modidfier myModif(){
+        if(..){
+           _;
+        }
+    }
+    function get() myModif returns(uint){
+
+    }
+If the condition in myModif is false, the execution of get() will return 0.
+
+Recommendation
+All the paths in a modifier must execute _ or revert.",/home/kaixuan/aila2024/slither/slither/detectors/functions/modifier.py
+low_level_calls,x,x
+missing_zero_check,"Missing zero address validation
+Configuration
+Check: missing-zero-check
+Severity: Low
+Confidence: Medium
+Description
+Detect missing zero address validation.
+
+Exploit Scenario:
+contract C {
+
+  modifier onlyAdmin {
+    if (msg.sender != owner) throw;
+    _;
+  }
+
+  function updateOwner(address newOwner) onlyAdmin external {
+    owner = newOwner;
+  }
+}
+Bob calls updateOwner without specifying the newOwner, so Bob loses ownership of the contract.
+
+Recommendation
+Check that the address is not zero.",/home/kaixuan/aila2024/slither/slither/detectors/operations/missing_zero_address_validation.py
+naming_convention,x,x
+redundant_statements,x,x
+reentrancy_benign,x,x
+reentrancy_eth,"Reentrancy vulnerabilities
+Configuration
+Check: reentrancy-eth
+Severity: High
+Confidence: Medium
+Description
+Detection of the reentrancy bug. Do not report reentrancies that don't involve Ether (see reentrancy-no-eth)
+
+Exploit Scenario:
+    function withdrawBalance(){
+        // send userBalance[msg.sender] Ether to msg.sender
+        // if msg.sender is a contract, it will call its fallback function
+        if( ! (msg.sender.call.value(userBalance[msg.sender])() ) ){
+            throw;
+        }
+        userBalance[msg.sender] = 0;
+    }
+Bob uses the re-entrancy bug to call withdrawBalance two times, and withdraw more than its initial deposit to the contract.
+
+Recommendation
+Apply the check-effects-interactions pattern.",/home/kaixuan/aila2024/slither/slither/detectors/reentrancy/reentrancy_eth.py
+reentrancy_events,"Reentrancy vulnerabilities
+Configuration
+Check: reentrancy-events
+Severity: Low
+Confidence: Medium
+Description
+Detects reentrancies that allow manipulation of the order or value of events.
+
+Exploit Scenario:
+contract ReentrantContract {
+	function f() external {
+		if (BugReentrancyEvents(msg.sender).counter() == 1) {
+			BugReentrancyEvents(msg.sender).count(this);
+		}
+	}
+}
+contract Counter {
+	uint public counter;
+	event Counter(uint);
+
+}
+contract BugReentrancyEvents is Counter {
+    function count(ReentrantContract d) external {
+        counter += 1;
+        d.f();
+        emit Counter(counter);
+    }
+}
+contract NoReentrancyEvents is Counter {
+	function count(ReentrantContract d) external {
+        counter += 1;
+        emit Counter(counter);
+        d.f();
+    }
+}
+If the external call d.f() re-enters BugReentrancyEvents, the Counter events will be incorrect (Counter(2), Counter(2)) whereas NoReentrancyEvents will correctly emit (Counter(1), Counter(2)). This may cause issues for offchain components that rely on the values of events e.g. checking for the amount deposited to a bridge.
+
+Recommendation
+Apply the check-effects-interactions pattern.",/home/kaixuan/aila2024/slither/slither/detectors/reentrancy/reentrancy_events.py
+reentrancy_no_eth,"Reentrancy vulnerabilities
+Configuration
+Check: reentrancy-no-eth
+Severity: Medium
+Confidence: Medium
+Description
+Detection of the reentrancy bug. Do not report reentrancies that involve Ether (see reentrancy-eth).
+
+Exploit Scenario:
+    function bug(){
+        require(not_called);
+        if( ! (msg.sender.call() ) ){
+            throw;
+        }
+        not_called = False;
+    }   
+Recommendation
+Apply the check-effects-interactions pattern.",/home/kaixuan/aila2024/slither/slither/detectors/reentrancy/reentrancy_read_before_write.py
+reentrancy_unlimited_gas,"Reentrancy vulnerabilities
+Configuration
+Check: reentrancy-unlimited-gas
+Severity: Informational
+Confidence: Medium
+Description
+Detection of the reentrancy bug. Only report reentrancy that is based on transfer or send.
+
+Exploit Scenario:
+    function callme(){
+        msg.sender.transfer(balances[msg.sender]):
+        balances[msg.sender] = 0;
+    }   
+send and transfer do not protect from reentrancies in case of gas price changes.
+
+Recommendation
+Apply the check-effects-interactions pattern.",/home/kaixuan/aila2024/slither/slither/detectors/reentrancy/reentrancy_no_gas.py
+shadowing_state,x,x
+similar_names,x,x
+solc_version,x,x
+suicidal,"Suicidal
+Configuration
+Check: suicidal
+Severity: High
+Confidence: High
+Description
+Unprotected call to a function executing selfdestruct/suicide.
+
+Exploit Scenario:
+contract Suicidal{
+    function kill() public{
+        selfdestruct(msg.sender);
+    }
+}
+Bob calls kill and destructs the contract.
+
+Recommendation
+Protect access to all sensitive functions.",/home/kaixuan/aila2024/slither/slither/detectors/functions/suicidal.py
+tautology,x,x
+timestamp,"Block timestamp
+Configuration
+Check: timestamp
+Severity: Low
+Confidence: Medium
+Description
+Dangerous usage of block.timestamp. block.timestamp can be manipulated by miners.
+
+Exploit Scenario:
+""Bob's contract relies on block.timestamp for its randomness. Eve is a miner and manipulates block.timestamp to exploit Bob's contract.
+
+Recommendation
+Avoid relying on block.timestamp.",/home/kaixuan/aila2024/slither/slither/detectors/operations/block_timestamp.py
+tx_origin,"Dangerous usage of tx.origin
+Configuration
+Check: tx-origin
+Severity: Medium
+Confidence: Medium
+Description
+tx.origin-based protection can be abused by a malicious contract if a legitimate user interacts with the malicious contract.
+
+Exploit Scenario:
+contract TxOrigin {
+    address owner = msg.sender;
+
+    function bug() {
+        require(tx.origin == owner);
+    }
+Bob is the owner of TxOrigin. Bob calls Eve's contract. Eve's contract calls TxOrigin and bypasses the tx.origin protection.
+
+Recommendation
+Do not use tx.origin for authorization.",/home/kaixuan/aila2024/slither/slither/detectors/statements/tx_origin.py
+unchecked_lowlevel,"Unchecked low-level calls
+Configuration
+Check: unchecked-lowlevel
+Severity: Medium
+Confidence: Medium
+Description
+The return value of a low-level call is not checked.
+
+Exploit Scenario:
+contract MyConc{
+    function my_func(address payable dst) public payable{
+        dst.call.value(msg.value)("""");
+    }
+}
+The return value of the low-level call is not checked, so if the call fails, the Ether will be locked in the contract. If the low level is used to prevent blocking operations, consider logging failed calls.
+
+Recommendation
+Ensure that the return value of a low-level call is checked or logged.",/home/kaixuan/aila2024/slither/slither/detectors/operations/unchecked_low_level_return_values.py
+unchecked_send,"Unchecked Send
+Configuration
+Check: unchecked-send
+Severity: Medium
+Confidence: Medium
+Description
+The return value of a send is not checked.
+
+Exploit Scenario:
+contract MyConc{
+    function my_func(address payable dst) public payable{
+        dst.send(msg.value);
+    }
+}
+The return value of send is not checked, so if the send fails, the Ether will be locked in the contract. If send is used to prevent blocking operations, consider logging the failed send.
+
+Recommendation
+Ensure that the return value of send is checked or logged.",/home/kaixuan/aila2024/slither/slither/detectors/operations/unchecked_send_return_value.py
+unchecked_transfer,"Unchecked transfer
+Configuration
+Check: unchecked-transfer
+Severity: High
+Confidence: Medium
+Description
+The return value of an external transfer/transferFrom call is not checked
+
+Exploit Scenario:
+contract Token {
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success);
+}
+contract MyBank{  
+    mapping(address => uint) balances;
+    Token token;
+    function deposit(uint amount) public{
+        token.transferFrom(msg.sender, address(this), amount);
+        balances[msg.sender] += amount;
+    }
+}
+Several tokens do not revert in case of failure and return false. If one of these tokens is used in MyBank, deposit will not revert if the transfer fails, and an attacker can call deposit for free..
+
+Recommendation
+Use SafeERC20, or ensure that the transfer/transferFrom return value is checked.",/home/kaixuan/aila2024/slither/slither/detectors/operations/unchecked_transfer.py
+unused_state,x,x
